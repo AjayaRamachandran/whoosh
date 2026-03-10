@@ -1,0 +1,75 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif !important;
+
+  --background: #fff;
+  --foreground: #222;
+  --primary: #236743;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  padding: 18px;
+  background: #fff;
+  color: #222;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.73rem;
+  color: var(--primary);
+}
+
+p {
+  margin: 0 0 14px;
+  color: var(--foreground);
+}
+
+.upload-form {
+  border: 1px solid #0002;
+  border-radius: 5px;
+  padding: 14px;
+  background: var(--background);
+}
+
+input[type="file"] {
+  width: 100%;
+  font-family: Inter, sans-serif;
+}
+
+.upload-button {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-radius: 5px;
+  width: 100%;
+  border: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  background: var(--primary);
+  color: var(--background);
+  font-family: Inter, sans-serif;
+  cursor: pointer;
+}
+
+.upload-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.response {
+  margin-top: 14px;
+  border-left: 3px solid var(--primary);
+  padding-left: 10px;
+  min-height: 22px;
+}

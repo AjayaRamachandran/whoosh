@@ -1,0 +1,68 @@
+{
+  "name": "whoosh-uploader",
+  "version": "1.0.0",
+  "description": "Desktop launcher for image upload via ngrok tunnel",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "start": "npm run dev",
+    "build:ui": "vite build",
+    "build:upload-ui": "vite build --config vite.upload.config.mjs",
+    "build": "npm run build:ui && npm run build:upload-ui",
+    "build:icon": "node scripts/generate-icon.cjs",
+    "dist": "npm run build && npm run build:icon && electron-builder --win nsis",
+    "start:prod": "electron ."
+  },
+  "build": {
+    "appId": "com.whoosh.uploader",
+    "productName": "Whoosh",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json",
+      ".env"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ngrok/ngrok": "^1.5.1",
+    "dotenv": "^17.3.1",
+    "express": "^4.21.2",
+    "lucide-react": "^0.577.0",
+    "multer": "^2.1.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^31.7.7",
+    "electron-builder": "^26.8.1",
+    "png-to-ico": "^3.0.1",
+    "vite": "^7.1.5"
+  }
+}
