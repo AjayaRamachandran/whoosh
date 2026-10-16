@@ -1,7 +1,7 @@
 {
   "name": "whoosh-uploader",
   "version": "1.0.0",
-  "description": "Desktop launcher for image upload via ngrok tunnel",
+  "description": "Desktop app for sending images from your phone over local WiFi",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -11,7 +11,8 @@
     "build": "npm run build:ui && npm run build:upload-ui",
     "build:icon": "node scripts/generate-icon.cjs",
     "dist": "npm run build && npm run build:icon && electron-builder --win nsis",
-    "start:prod": "electron ."
+    "start:prod": "electron .",
+    "test": "node --test"
   },
   "build": {
     "appId": "com.whoosh.uploader",
@@ -22,11 +23,11 @@
     },
     "files": [
       "main.js",
+      "lan.js",
       "preload.js",
       "dist/**/*",
       "node_modules/**/*",
-      "package.json",
-      ".env"
+      "package.json"
     ],
     "win": {
       "target": [
@@ -41,14 +42,14 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh"
     }
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ngrok/ngrok": "^1.5.1",
-    "dotenv": "^17.3.1",
+    "@fontsource-variable/inter": "^5.3.0",
     "express": "^4.21.2",
     "lucide-react": "^0.577.0",
     "multer": "^2.1.1",
@@ -57,12 +58,14 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^31.7.7",
     "electron-builder": "^26.8.1",
     "png-to-ico": "^3.0.1",
+    "tailwindcss": "^4.3.3",
     "vite": "^7.1.5"
   }
 }

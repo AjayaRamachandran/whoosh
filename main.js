@@ -1,23 +1,28 @@
 const path = require("path");
+const http = require("http");
 const fs = require("fs/promises");
-const dotenv = require("dotenv");
 const express = require("express");
 const multer = require("multer");
 const QRCode = require("qrcode");
-const ngrok = require("@ngrok/ngrok");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { pickLanAddress, createSessionToken, requireToken } = require("./lan");
 
-dotenv.config({ path: path.join(__dirname, ".env") });
+const PREFERRED_PORT = 47800;
+const NETWORK_POLL_MS = 5000;
+const READY_STATUS = "Ready. Scan the code with a phone on the same WiFi.";
+const NO_NETWORK_STATUS = "Connect this computer to WiFi to start.";
 
 let mainWindow = null;
 let server = null;
-let tunnel = null;
 let uploadUrl = "";
 let qrCodeDataUrl = "";
 let localPort = null;
-let statusText = "Starting backend...";
+let lanIp = null;
+let sessionToken = "";
+let networkPollId = null;
+let networkChecked = false;
+let statusText = "Starting up...";
 let startupError = "";
-let ngrokValidated = false;
 let shuttingDown = false;
 let uploadViteServer = null;
 const viteDevServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -28,8 +33,7 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 }
 });
 
-async function createExpressApp() {
-  const expressApp = express();
+async function createExpressApp(expressApp, httpServer) {
   const useUploadUiHmr = !app.isPackaged && process.env.UPLOAD_UI_HMR !== "0";
 
   if (useUploadUiHmr) {
@@ -37,7 +41,9 @@ async function createExpressApp() {
     uploadViteServer = await createServer({
       configFile: path.join(__dirname, "vite.upload.config.mjs"),
       server: {
-        middlewareMode: true
+        middlewareMode: true,
+        // Serve HMR over the same host/port as the page so it also works from the phone.
+        hmr: { server: httpServer }
       },
       appType: "custom"
     });
@@ -61,7 +67,7 @@ async function createExpressApp() {
     });
   }
 
-  expressApp.post("/upload", upload.single("image"), async (req, res) => {
+  expressApp.post("/upload", requireToken(() => sessionToken), upload.single("image"), async (req, res) => {
     try {
       if (!req.file) {
         res.status(400).send("No file received. Please pick an image first.");
@@ -91,8 +97,9 @@ async function createExpressApp() {
       res.send(`Saved successfully to: ${saveResult.filePath}`);
       sendUiStatus(`Saved ${suggestedName}`);
     } catch (error) {
+      console.error("Failed to save upload:", error);
       res.status(500).send("Failed to save uploaded image.");
-      sendUiStatus(`Upload failed: ${error.message}`);
+      sendUiStatus("Couldn't save that image. Please try again.");
     }
   });
 
@@ -110,119 +117,67 @@ function setStatus(nextStatus) {
   sendUiStatus(nextStatus);
 }
 
-async function withTimeout(promise, timeoutMs, timeoutMessage) {
-  let timeoutId = null;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+function listen(httpServer, port) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      httpServer.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      httpServer.off("error", onError);
+      resolve();
+    };
+    httpServer.once("error", onError);
+    httpServer.once("listening", onListening);
+    httpServer.listen(port, "0.0.0.0");
   });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
 }
 
-async function withRetries(operation, options) {
-  const {
-    attempts,
-    initialDelayMs,
-    backoffMultiplier = 1.5
-  } = options;
-  let nextDelayMs = initialDelayMs;
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await operation(attempt);
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) {
-        await new Promise((resolve) => setTimeout(resolve, nextDelayMs));
-        nextDelayMs = Math.ceil(nextDelayMs * backoffMultiplier);
-      }
-    }
+async function refreshUploadUrl() {
+  const nextLanIp = pickLanAddress();
+  if (networkChecked && nextLanIp === lanIp) {
+    return;
   }
 
-  throw lastError;
-}
-
-async function validateNgrokUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (!parsed.protocol.startsWith("http")) {
-      return false;
-    }
-
-    const response = await withRetries(
-      () => withTimeout(fetch(url, { method: "GET" }), 12000, "Timed out validating ngrok URL"),
-      {
-        attempts: 6,
-        initialDelayMs: 1000,
-        backoffMultiplier: 1.5
-      }
-    );
-
-    return response.ok;
-  } catch (_error) {
-    return false;
+  networkChecked = true;
+  lanIp = nextLanIp;
+  if (!lanIp) {
+    uploadUrl = "";
+    qrCodeDataUrl = "";
+    setStatus(NO_NETWORK_STATUS);
+    return;
   }
-}
 
-function resolveNgrokToken() {
-  const rawToken = process.env.NGROK_AUTHTOKEN || process.env.NGROK_TOKEN || "";
-  return rawToken.trim();
+  const nextUploadUrl = `http://${lanIp}:${localPort}/?t=${sessionToken}`;
+  qrCodeDataUrl = await QRCode.toDataURL(nextUploadUrl);
+  uploadUrl = nextUploadUrl;
+  setStatus(READY_STATUS);
 }
 
 async function startBackend() {
-  const expressApp = await createExpressApp();
+  const expressApp = express();
+  const httpServer = http.createServer(expressApp);
+  await createExpressApp(expressApp, httpServer);
   startupError = "";
-  ngrokValidated = false;
-  setStatus("Starting local server...");
+  sessionToken = createSessionToken();
+  setStatus("Starting up...");
 
-  server = await new Promise((resolve, reject) => {
-    const httpServer = expressApp.listen(0, "127.0.0.1", () => resolve(httpServer));
-    httpServer.on("error", reject);
-  });
-
-  ({ port: localPort } = server.address());
-  setStatus(`Local server ready on ${localPort}. Creating ngrok URL...`);
-  const ngrokToken = resolveNgrokToken();
-
-  if (!ngrokToken) {
-    throw new Error("Missing NGROK_AUTHTOKEN (or NGROK_TOKEN) in .env");
-  }
-
-  setStatus("ngrok token found. Connecting tunnel...");
-
-  tunnel = await withRetries(
-    () => withTimeout(
-      ngrok.connect({
-        addr: localPort,
-        authtoken: ngrokToken
-      }),
-      30000,
-      "ngrok connection timed out"
-    ),
-    {
-      attempts: 4,
-      initialDelayMs: 1500,
-      backoffMultiplier: 1.6
+  try {
+    await listen(httpServer, PREFERRED_PORT);
+  } catch (error) {
+    if (error.code !== "EADDRINUSE") {
+      throw error;
     }
-  );
-
-  uploadUrl = tunnel.url();
-  if (!uploadUrl) {
-    throw new Error("ngrok did not return a URL");
+    await listen(httpServer, 0);
   }
 
-  setStatus("Validating ngrok URL...");
-  ngrokValidated = await validateNgrokUrl(uploadUrl);
+  server = httpServer;
+  ({ port: localPort } = server.address());
 
-  qrCodeDataUrl = await QRCode.toDataURL(uploadUrl);
-  setStatus(ngrokValidated ? "Ready for uploads" : "Ready for uploads (validation skipped)");
+  await refreshUploadUrl();
+  networkPollId = setInterval(() => {
+    refreshUploadUrl().catch((error) => console.error("Failed to refresh network address:", error));
+  }, NETWORK_POLL_MS);
 }
 
 async function waitForUrl(url, timeoutMs) {
@@ -274,19 +229,9 @@ async function stopServices() {
   }
   shuttingDown = true;
 
-  try {
-    if (tunnel) {
-      await tunnel.close();
-      tunnel = null;
-    }
-  } catch (_error) {
-    // Keep shutdown sequence going.
-  }
-
-  try {
-    await ngrok.kill();
-  } catch (_error) {
-    // Keep shutdown sequence going.
+  if (networkPollId) {
+    clearInterval(networkPollId);
+    networkPollId = null;
   }
 
   if (server) {
@@ -308,7 +253,7 @@ ipcMain.handle("whoosh:get-state", async () => ({
   localPort,
   statusText,
   startupError,
-  ngrokValidated
+  lanIp
 }));
 
 ipcMain.handle("whoosh:open-upload-page", async () => {
@@ -334,10 +279,10 @@ app.whenReady().then(async () => {
 
   try {
     await startBackend();
-    setStatus("Tunnel online");
   } catch (error) {
-    startupError = error.message;
-    setStatus(`Startup failed: ${error.message}`);
+    console.error("Failed to start backend:", error);
+    startupError = "Something went wrong while starting Whoosh. Please restart the app.";
+    setStatus(startupError);
   }
 });
 
