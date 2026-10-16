@@ -23,7 +23,7 @@ function Titlebar() {
   return (
     <header className="app-drag flex h-9 shrink-0 items-center justify-between">
       <span className="flex items-center gap-2 pl-4 text-[13px] font-medium text-stone-500 dark:text-stone-400">
-        <WhooshIcon className="size-4" />
+        <WhooshIcon className="size-[18px]" />
         Whoosh
       </span>
       <div className="app-no-drag flex">
