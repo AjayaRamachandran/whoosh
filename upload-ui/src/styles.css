@@ -3,6 +3,6 @@
 
 @theme {
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
-  --color-primary: #236743;
-  --color-primary-hover: #1c5537;
+  --color-primary: #00aaff;
+  --color-primary-hover: #0095e0;
 }

@@ -6,6 +6,7 @@ const multer = require("multer");
 const QRCode = require("qrcode");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { pickLanAddress, createSessionToken, requireToken } = require("./lan");
+const { safeFileName, saveFilesToFolder } = require("./saving");
 
 const PREFERRED_PORT = 47800;
 const NETWORK_POLL_MS = 5000;
@@ -28,10 +29,68 @@ let uploadViteServer = null;
 const viteDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const uploadUiDistDir = path.join(__dirname, "dist", "upload-ui");
 
+const MAX_FILE_MB = 30;
+const MAX_FILES = 50;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 }
+  // Phones send names as UTF-8; the default would garble anything non-ASCII.
+  defParamCharset: "utf8",
+  limits: { fileSize: MAX_FILE_MB * 1024 * 1024, files: MAX_FILES }
 });
+
+const UPLOAD_LIMIT_MESSAGES = {
+  LIMIT_FILE_SIZE: `One of those files is too big. Each file can be up to ${MAX_FILE_MB} MB.`,
+  LIMIT_FILE_COUNT: `That's a lot of files! Please send ${MAX_FILES} or fewer at a time.`
+};
+
+function receiveFiles(req, res, next) {
+  upload.array("files", MAX_FILES)(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+    const message = UPLOAD_LIMIT_MESSAGES[error.code];
+    if (message) {
+      res.status(413).send(message);
+      return;
+    }
+    next(error);
+  });
+}
+
+async function saveSingleFile(file) {
+  const suggestedName = safeFileName(file.originalname);
+  const saveResult = await dialog.showSaveDialog(mainWindow, {
+    title: "Save uploaded file",
+    defaultPath: path.join(app.getPath("downloads"), suggestedName),
+    buttonLabel: "Save"
+  });
+
+  if (saveResult.canceled || !saveResult.filePath) {
+    return null;
+  }
+
+  await fs.writeFile(saveResult.filePath, file.buffer);
+  return saveResult.filePath;
+}
+
+async function saveManyFiles(files) {
+  const folderResult = await dialog.showOpenDialog(mainWindow, {
+    title: `Choose a folder for ${files.length} files`,
+    defaultPath: app.getPath("downloads"),
+    buttonLabel: "Save Here",
+    properties: ["openDirectory", "createDirectory"]
+  });
+
+  const folder = folderResult.filePaths?.[0];
+  if (folderResult.canceled || !folder) {
+    return null;
+  }
+
+  await saveFilesToFolder(folder, files);
+  return folder;
+}
 
 async function createExpressApp(expressApp, httpServer) {
   const useUploadUiHmr = !app.isPackaged && process.env.UPLOAD_UI_HMR !== "0";
@@ -67,39 +126,27 @@ async function createExpressApp(expressApp, httpServer) {
     });
   }
 
-  expressApp.post("/upload", requireToken(() => sessionToken), upload.single("image"), async (req, res) => {
+  expressApp.post("/upload", requireToken(() => sessionToken), receiveFiles, async (req, res) => {
+    const files = req.files || [];
+    if (files.length === 0) {
+      res.status(400).send("No files received. Please pick something to send first.");
+      return;
+    }
+
+    const label = files.length === 1 ? safeFileName(files[0].originalname) : `${files.length} files`;
     try {
-      if (!req.file) {
-        res.status(400).send("No file received. Please pick an image first.");
-        return;
-      }
-
-      if (!req.file.mimetype.startsWith("image/")) {
-        res.status(400).send("Only image files are allowed.");
-        return;
-      }
-
-      const suggestedName = req.file.originalname || "uploaded-image";
-      const defaultPath = path.join(app.getPath("downloads"), suggestedName);
-
-      const saveResult = await dialog.showSaveDialog(mainWindow, {
-        title: "Save uploaded image",
-        defaultPath,
-        buttonLabel: "Save Image"
-      });
-
-      if (saveResult.canceled || !saveResult.filePath) {
+      const savedTo = files.length === 1 ? await saveSingleFile(files[0]) : await saveManyFiles(files);
+      if (!savedTo) {
         res.status(400).send("Save canceled.");
         return;
       }
 
-      await fs.writeFile(saveResult.filePath, req.file.buffer);
-      res.send(`Saved successfully to: ${saveResult.filePath}`);
-      sendUiStatus(`Saved ${suggestedName}`);
+      res.send(files.length === 1 ? `Saved successfully to: ${savedTo}` : `Saved ${label} to: ${savedTo}`);
+      sendUiStatus(`Saved ${label}`);
     } catch (error) {
       console.error("Failed to save upload:", error);
-      res.status(500).send("Failed to save uploaded image.");
-      sendUiStatus("Couldn't save that image. Please try again.");
+      res.status(500).send("Couldn't save on your computer. Please try again.");
+      sendUiStatus("Couldn't save what was sent. Please try again.");
     }
   });
 

@@ -1,7 +1,7 @@
 {
   "name": "whoosh-uploader",
   "version": "1.0.0",
-  "description": "Desktop app for sending images from your phone over local WiFi",
+  "description": "Desktop app for sending files from your phone over local WiFi",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -24,6 +24,7 @@
     "files": [
       "main.js",
       "lan.js",
+      "saving.js",
       "preload.js",
       "dist/**/*",
       "node_modules/**/*",

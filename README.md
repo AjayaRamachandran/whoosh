@@ -9,16 +9,16 @@
 <img src="https://img.shields.io/badge/Vite-purple?logo=Vite">
 </p>
 
-Whoosh is a minimal cross-platform desktop app that lets you quickly transfer images from your phone to your computer over your local WiFi network. The app spins up a local upload server and shows you a QR code. Scan it with a phone on the same WiFi to instantly upload and save files directly to your computer — no accounts, no internet connection, and nothing leaves your network.
+Whoosh is a minimal cross-platform desktop app that lets you quickly transfer photos and files from your phone to your computer over your local WiFi network. The app spins up a local upload server and shows you a QR code. Scan it with a phone on the same WiFi to instantly upload and save files directly to your computer — no accounts, no internet connection, and nothing leaves your network.
 
 ---
 
 ## Features
 
-- **Instant image transfer:** Shows a QR code for your computer's local address as soon as you open the app.
+- **Instant file transfer:** Shows a QR code for your computer's local address as soon as you open the app.
 - **Super easy uploads:** Scan QR code with your phone and upload images/files instantly, no typing or pairing required.
 - **Stays on your network:** Files go straight from phone to computer over WiFi. Each QR code carries a one-time session key, so only phones that scanned it can upload.
-- **Save As dialog:** Prompts you when uploads are received, so you can name & save images where you want.
+- **Save As dialog:** Prompts you when uploads are received, so you can name & save files where you want. Send several at once and you pick a folder for all of them.
 - **Auto cleanup:** Closes the server on app exit.
 - **Cross-platform:** Works on Windows, macOS, and Linux.
 
@@ -56,8 +56,8 @@ The output will appear in the `dist/` or `release/` directory.
 
 1. **Launch the app** – The Electron window opens with a QR code and the its local upload address.
 2. **Scan the QR code** – With your phone on the same WiFi as your computer, use your phone camera or QR code app to open the upload page.
-3. **Upload an image** – Select an image or file and upload it from your phone.
-4. **Receive & save** – The desktop app will pop up a "Save As" dialog for each received file.
+3. **Upload files** – Select one or more photos or files and upload them from your phone.
+4. **Receive & save** – The desktop app will pop up a "Save As" dialog for a single file, or a folder picker when several are sent at once.
 5. **Quit cleanly** – Closing the window will safely shut down the local server.
 
 ---

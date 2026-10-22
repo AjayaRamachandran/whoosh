@@ -123,7 +123,7 @@ export function App() {
 
       <main className="flex flex-1 flex-col items-center justify-center gap-6 px-8 pb-8">
         <div className="text-center">
-          <h1 className="text-xl font-semibold tracking-tight">Send images from your phone</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Send files from your phone</h1>
           <p className="mt-1.5 text-sm text-stone-500 dark:text-stone-400">
             Point your phone's camera at the code to get started.
           </p>
